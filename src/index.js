@@ -8,6 +8,7 @@ const ESTADOS = [
   'EN MAQUINA', 'CAMBIO', 'ETIQUETADOS', 'FALTA ETIQUETAR',
   'MOLDE SIN INGRESAR', 'SALIDA', 'NUEVO', 'EN REPARACION ESTANTERIA ROJA',
 ];
+const CICLOS = ['ACTIVO', 'EN_REPARACION', 'INACTIVO', 'BAJA'];
 const TIPOS = ['ESTANTE', 'PALLET', 'DEPOSITO', 'SIN_ASIGNAR', 'OTRO'];
 const DEFAULT_ORIGINS = ['https://diegortizdao-collab.github.io'];
 
@@ -84,6 +85,13 @@ function cleanEstado(v) {
   if (!ESTADOS.includes(s)) throw new HttpError(400, `Estado inválido: ${s}`);
   return s;
 }
+function cleanCiclo(v) {
+  if (v === undefined) return undefined;
+  const s = String(v ?? '').trim().toUpperCase();
+  if (!s) return null;
+  if (!CICLOS.includes(s)) throw new HttpError(400, `Ciclo de vida inválido: ${s}. Opciones: ${CICLOS.join(', ')}`);
+  return s;
+}
 function cleanPersonal(v) {
   if (v === undefined) return undefined;
   if (v === null || v === '') return null;
@@ -128,6 +136,7 @@ function cleanValor(v, campo) {
 
 // ---------- acceso a datos ----------
 const COLS = (admin) => `m.id, m.n_control, m.especificacion, m.cliente, m.posicion, m.personal_para_mover, m.estado,
+  m.ciclo_vida, m.ciclo_vida_origen, m.ciclo_vida_por, m.ciclo_vida_en,
   m.actualizado_por, m.actualizado_en${admin ? ', m.actualizado_ip' : ''}`;
 
 async function resolverPosicion(sql, texto) {
@@ -190,7 +199,7 @@ async function handle(req, env, url, ctx) {
       sql.query('select codigo, tipo, orden, activa from posiciones order by orden, codigo'),
       sql.query('select max(actualizado_en) as ultima from moldes'),
     ]);
-    return json(req, env, { rol: role, estados: ESTADOS, ultima_actualizacion: ult[0]?.ultima ?? null, posiciones, moldes });
+    return json(req, env, { rol: role, estados: ESTADOS, ciclos: CICLOS, ultima_actualizacion: ult[0]?.ultima ?? null, posiciones, moldes });
   }
 
   // ---- mover molde ----
@@ -235,13 +244,20 @@ async function handle(req, env, url, ctx) {
       especificacion: cleanText(b.especificacion, 300, { required: true, label: 'La especificación' }),
       cliente: cleanText(b.cliente, 120),
       n_control: cleanText(b.n_control, 40),
+      ciclo_vida: cleanCiclo(b.ciclo_vida),
     };
-    const soloAdmin = ['especificacion', 'cliente', 'n_control'];
+    const soloAdmin = ['especificacion', 'cliente', 'n_control', 'ciclo_vida'];
     const sets = [], vals = [];
     for (const [k, v] of Object.entries(campos)) {
       if (v === undefined) continue;
       if (soloAdmin.includes(k) && !admin) throw new HttpError(403, 'Ese dato solo lo edita el administrador.');
       vals.push(v); sets.push(`${k} = $${vals.length}`);
+      if (k === 'ciclo_vida') {
+        // clasificar = confirmar (queda registrado quién y cuándo); dejar en blanco = volver a "sin clasificar"
+        sets.push(v === null ? `ciclo_vida_origen = null, ciclo_vida_por = null, ciclo_vida_en = null`
+          : `ciclo_vida_origen = 'confirmado', ciclo_vida_por = ${'$' + (vals.length + 1)}, ciclo_vida_en = now()`);
+        if (v !== null) vals.push(nombre);
+      }
     }
     if (!sets.length) throw new HttpError(400, 'No hay nada para actualizar.');
     await getMolde(sql, id);
@@ -249,7 +265,7 @@ async function handle(req, env, url, ctx) {
     const r = await sql.query(
       `update moldes set ${sets.join(', ')}, actualizado_por = $${vals.length - 2}, actualizado_ip = $${vals.length - 1}, actualizado_en = now()
        where id = $${vals.length}
-       returning id, n_control, especificacion, cliente, posicion, personal_para_mover, estado, actualizado_por, actualizado_en`, vals);
+       returning id, n_control, especificacion, cliente, posicion, personal_para_mover, estado, ciclo_vida, ciclo_vida_origen, actualizado_por, actualizado_en`, vals);
     return json(req, env, { molde: r[0] });
   }
 
@@ -264,11 +280,12 @@ async function handle(req, env, url, ctx) {
     const pos = await resolverPosicion(sql, b.posicion ?? 'S/A');
     const personal = cleanPersonal(b.personal_para_mover) ?? null;
     const estado = cleanEstado(b.estado) ?? null;
+    const ciclo = cleanCiclo(b.ciclo_vida) ?? null;
     const r = await sql.query(
-      `insert into moldes (n_control, especificacion, cliente, posicion, personal_para_mover, estado, actualizado_por, actualizado_ip)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
-       returning id, n_control, especificacion, cliente, posicion, personal_para_mover, estado, actualizado_por, actualizado_en`,
-      [n_control, especificacion, cliente, pos.codigo, personal, estado, nombre, ip]);
+      `insert into moldes (n_control, especificacion, cliente, posicion, personal_para_mover, estado, ciclo_vida, ciclo_vida_origen, ciclo_vida_por, ciclo_vida_en, actualizado_por, actualizado_ip)
+       values ($1,$2,$3,$4,$5,$6,$7, case when $7::text is null then null else 'confirmado' end, case when $7::text is null then null else $8::text end, case when $7::text is null then null else now() end, $8,$9)
+       returning id, n_control, especificacion, cliente, posicion, personal_para_mover, estado, ciclo_vida, ciclo_vida_origen, actualizado_por, actualizado_en`,
+      [n_control, especificacion, cliente, pos.codigo, personal, estado, ciclo, nombre, ip]);
     return json(req, env, { molde: r[0] }, 201);
   }
 
