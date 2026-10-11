@@ -56,6 +56,7 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 
 ## Fotos de la ficha
 - Tabla `fotos`: `db/fotos.sql` (correr UNA vez en Neon). Guarda en la base la foto de cada variante y el logo de cada familia (la ficha las achica antes: ~100 KB c/u), sin servicios extra ni bindings nuevos.
+- Ciclo de vida del molde (semáforo): `db/ciclo_vida.sql` (correr UNA vez en Neon, ANTES de desplegar este Worker; es idempotente). Agrega `ciclo_vida` (ACTIVO / EN_REPARACION / INACTIVO / BAJA; NULL = sin clasificar), `ciclo_vida_origen` (sugerido / confirmado), quién y cuándo. Es independiente de `estado`. Solo el administrador lo cambia (`PATCH /api/moldes/:id` con `ciclo_vida`); clasificar = confirmar. La propuesta inicial marca ACTIVO (sugerido) a los EN MAQUINA / CAMBIO y EN_REPARACION (sugerido) a los de reparación; el resto queda sin clasificar.
 - `POST /api/fotos` (clave de planta: fotos de producto; admin: también logos) reemplaza la foto anterior de esa variante. `GET /api/fotos` lista. `GET /api/fotos/:uuid/img` es pública (la pide una etiqueta `<img>`) y el uuid cambia en cada reemplazo, así que el navegador la cachea. `DELETE` solo admin.
 - Si algún día se pasa de unos miles de fotos, se migra a R2 cambiando solo esa ruta.
 
