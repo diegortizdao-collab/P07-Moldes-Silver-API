@@ -54,8 +54,13 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 - Endpoints: `GET /api/vinculos` (cualquier clave); `PUT /api/vinculos/:familia` {nombre, molde_id}, `POST /api/vinculos/:familia/confirmar`, `DELETE /api/vinculos/:familia/:molde_id` (solo admin).
 - Una familia puede tener más de un molde vinculado; un molde puede servir a varias familias.
 
+## Fotos de la ficha
+- Tabla `fotos`: `db/fotos.sql` (correr UNA vez en Neon). Guarda en la base la foto de cada variante y el logo de cada familia (la ficha las achica antes: ~100 KB c/u), sin servicios extra ni bindings nuevos.
+- `POST /api/fotos` (clave de planta: fotos de producto; admin: también logos) reemplaza la foto anterior de esa variante. `GET /api/fotos` lista. `GET /api/fotos/:uuid/img` es pública (la pide una etiqueta `<img>`) y el uuid cambia en cada reemplazo, así que el navegador la cachea. `DELETE` solo admin.
+- Si algún día se pasa de unos miles de fotos, se migra a R2 cambiando solo esa ruta.
+
 ## Siguiente fase
-Fotos/logos de la ficha en R2 (hoy quedan en el navegador), edición de la ficha compartida entre dispositivos y lectura del maestro desde el planificador.
+Edición de campos de la ficha compartida entre dispositivos (hoy queda en el navegador) y lectura del maestro desde el planificador.
 
 ## Deploy desde Cloudflare (sin Node local)
 Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) están en Secrets Store y declarados en wrangler.toml (si no figuran ahí, el deploy los borra).

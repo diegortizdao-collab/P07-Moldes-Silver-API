@@ -140,6 +140,19 @@ async function handle(req, env, url, ctx) {
 
   if (pathname === '/api/health' && method === 'GET') return json(req, env, { ok: true });
 
+  // imagen de una foto: pública (la pide una etiqueta <img>, que no puede mandar clave); el id es un uuid no adivinable
+  const mi = pathname.match(/^\/api\/fotos\/([0-9a-f-]{36})\/img$/);
+  if (mi && method === 'GET') {
+    const dbUrl0 = await secret(env.DATABASE_URL);
+    if (!dbUrl0) throw new HttpError(500, 'Servidor sin base de datos configurada.');
+    const r = await neon(dbUrl0).query("select mime, encode(datos,'base64') as b64 from fotos where id = $1", [mi[1]]);
+    if (!r.length) throw new HttpError(404, 'Foto no encontrada.');
+    const bin = atob(r[0].b64.replace(/\s/g, ''));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Response(bytes, { headers: { 'Content-Type': r[0].mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'Cross-Origin-Resource-Policy': 'cross-origin' } });
+  }
+
   const role = await roleOf(req, env);
   if (!role) {
     await new Promise(r => setTimeout(r, 600)); // frena la prueba de claves por fuerza bruta
@@ -294,6 +307,37 @@ async function handle(req, env, url, ctx) {
     if (!admin) throw new HttpError(403, 'Solo el administrador desvincula moldes.');
     const familia = cleanFamilia(decodeURIComponent(m[1]));
     await sql.query('delete from vinculos where familia_id = $1 and molde_id = $2', [familia, parseId(m[2])]);
+    return json(req, env, { ok: true });
+  }
+
+  // ---- fotos de la ficha de producto (producto por variante / logo de cliente por familia) ----
+  if (pathname === '/api/fotos' && method === 'GET') {
+    const f = await sql.query('select id, familia_id, variante, tipo, subido_por, subido_en from fotos order by subido_en');
+    return json(req, env, { fotos: f });
+  }
+  if (pathname === '/api/fotos' && method === 'POST') {
+    const b = await readBody(req);
+    const nombre = cleanNombre(b.nombre);
+    const familia = cleanFamilia(b.familia_id);
+    const tipo = String(b.tipo ?? 'producto');
+    if (!['producto', 'logo'].includes(tipo)) throw new HttpError(400, 'Tipo de imagen inválido.');
+    if (tipo === 'logo' && !admin) throw new HttpError(403, 'El logo del cliente solo lo cambia el administrador.');
+    const variante = tipo === 'logo' ? '' : String(b.variante ?? '').trim().slice(0, 60);
+    const mm = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(b.imagen ?? ''));
+    if (!mm) throw new HttpError(400, 'La imagen debe ser JPG, PNG o WEBP.');
+    if (mm[2].length > 1_200_000) throw new HttpError(413, 'La imagen es demasiado pesada (máx. ~900 KB).');
+    const r = await sql.query(
+      `insert into fotos (familia_id, variante, tipo, mime, datos, subido_por) values ($1,$2,$3,$4,decode($5,'base64'),$6)
+       on conflict (familia_id, variante, tipo) do update set id = gen_random_uuid(), mime = excluded.mime, datos = excluded.datos,
+         subido_por = excluded.subido_por, subido_en = now()
+       returning id, familia_id, variante, tipo, subido_por, subido_en`,
+      [familia, variante, tipo, 'image/' + mm[1], mm[2], nombre]);
+    return json(req, env, { foto: r[0] }, 201);
+  }
+  m = pathname.match(/^\/api\/fotos\/([0-9a-f-]{36})$/);
+  if (m && method === 'DELETE') {
+    if (!admin) throw new HttpError(403, 'Solo el administrador borra fotos.');
+    await sql.query('delete from fotos where id = $1', [m[1]]);
     return json(req, env, { ok: true });
   }
 
