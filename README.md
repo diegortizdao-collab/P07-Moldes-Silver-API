@@ -52,4 +52,4 @@ Ficha de producto leyendo de Neon (con "vincular molde" asistido: solo ~290 de 1
 
 
 ## Deploy desde Cloudflare (sin Node local)
-Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) se cargan en Settings → Variables and Secrets.
+Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) están en Secrets Store y declarados en wrangler.toml (si no figuran ahí, el deploy los borra).
