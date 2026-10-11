@@ -12,10 +12,11 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 
 ## Despliegue (≈15 min)
 1. **Neon** (proyecto de NC Silver): SQL Editor → pegar y ejecutar `db/schema.sql`, luego `db/seed.sql`. La semilla se bloquea sola si se corre por segunda vez.
-2. **Worker**: en `worker/wrangler.toml` copiar `store_id` y `secret_name` del `wrangler.toml` de NC-Silver-API (el binding `DATABASE_URL` tiene que quedar declarado ahí, wrangler no lo automatiza).
+2. **Worker** (igual que NC-Silver-API: secrets comunes, sin Secrets Store):
    ```
    cd worker
    npm install
+   npx wrangler secret put DATABASE_URL   # cadena de conexión de Neon (la misma que usa NC)
    npx wrangler secret put PLANTA_KEY     # Moldessilverindustrial
    npx wrangler secret put ADMIN_KEY      # una clave distinta, solo para Diego
    npx wrangler deploy
