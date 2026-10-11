@@ -1,0 +1,17 @@
+name = "p07-moldes-api"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Orígenes que pueden llamar a la API (separados por coma). Agregá aquí otros dominios si hace falta.
+ALLOWED_ORIGINS = "https://diegortizdao-collab.github.io"
+
+# DATABASE_URL: el mismo secret de Secrets Store que ya usa NC-Silver-API (misma base Neon).
+# Copiá store_id y secret_name del wrangler.toml de NC-Silver-API.
+[[secrets_store_secrets]]
+binding = "DATABASE_URL"
+store_id = "REEMPLAZAR_CON_EL_STORE_ID_DE_NC_SILVER_API"
+secret_name = "REEMPLAZAR_CON_EL_SECRET_NAME_DE_NC_SILVER_API"
+
+# PLANTA_KEY y ADMIN_KEY NO van acá: se cargan con `npx wrangler secret put PLANTA_KEY` y
+# `npx wrangler secret put ADMIN_KEY` (persisten entre deploys, no dependen del Secrets Store).
