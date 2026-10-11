@@ -59,8 +59,13 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 - `POST /api/fotos` (clave de planta: fotos de producto; admin: también logos) reemplaza la foto anterior de esa variante. `GET /api/fotos` lista. `GET /api/fotos/:uuid/img` es pública (la pide una etiqueta `<img>`) y el uuid cambia en cada reemplazo, así que el navegador la cachea. `DELETE` solo admin.
 - Si algún día se pasa de unos miles de fotos, se migra a R2 cambiando solo esa ruta.
 
+## Ficha editable compartida y control de cambios
+- Tablas `ficha_datos` y `ficha_cambios`: `db/ficha_datos.sql` (correr UNA vez en Neon). El maestro de 1.867 familias viaja en la app; en Neon solo queda lo que se edita o se agrega.
+- `GET /api/ficha` (cualquier clave); `PATCH /api/ficha/:familia` (solo admin, con nombre; campos permitidos en una lista blanca); `POST /api/ficha` (alta rápida, clave de planta o admin); `GET /api/ficha/:familia/cambios`.
+- Cada edición queda en el control de cambios: campo, valor anterior, valor nuevo, quién y cuándo. Se imprime en el Q.12.
+
 ## Siguiente fase
-Edición de campos de la ficha compartida entre dispositivos (hoy queda en el navegador) y lectura del maestro desde el planificador.
+Lectura del maestro de productos desde el planificador (hoy el maestro viaja en `data.js`).
 
 ## Deploy desde Cloudflare (sin Node local)
 Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) están en Secrets Store y declarados en wrangler.toml (si no figuran ahí, el deploy los borra).

@@ -110,6 +110,22 @@ function cleanFamilia(v) {
   return s;
 }
 
+
+// campos de la ficha de producto que se pueden editar (el resto de la familia viene del maestro y no se toca)
+const FICHA_CAMPOS = [
+  'nombre', 'cliente', 'material', 'cavidades', 'pesoUnitario', 'tipo', 'ciclo',
+  'medidaCaja', 'unidXCaja', 'medidaBolsa', 'unidXBolsa', 'tipoDosificacion', 'codigoDosificacion',
+  'dosificacionPct', 'grXKg', 'grXBolsa', 'inserto', 'observaciones', 'descripcion',
+  'materialMolde', 'clienteProveeMP', 'clienteProveeInsumos', 'planos', 'legislacion',
+  'muestraPatron', 'controlDimensional', 'controlFuncional', 'procedimientosEspeciales',
+];
+function cleanValor(v, campo) {
+  const max = ['descripcion', 'observaciones', 'controlDimensional', 'controlFuncional', 'procedimientosEspeciales'].includes(campo) ? 4000 : 300;
+  const s = String(v ?? '').replace(/\r/g, '').replace(/[\u0000-\u0008\u000b-\u001f]/g, '').trim();
+  if (s.length > max) throw new HttpError(400, `El campo ${campo} es demasiado largo (máx. ${max}).`);
+  return s;
+}
+
 // ---------- acceso a datos ----------
 const COLS = (admin) => `m.id, m.n_control, m.especificacion, m.cliente, m.posicion, m.personal_para_mover, m.estado,
   m.actualizado_por, m.actualizado_en${admin ? ', m.actualizado_ip' : ''}`;
@@ -338,6 +354,54 @@ async function handle(req, env, url, ctx) {
   if (m && method === 'DELETE') {
     if (!admin) throw new HttpError(403, 'Solo el administrador borra fotos.');
     await sql.query('delete from fotos where id = $1', [m[1]]);
+    return json(req, env, { ok: true });
+  }
+
+  // ---- ficha de producto: datos editables compartidos + control de cambios ----
+  if (pathname === '/api/ficha' && method === 'GET') {
+    const d = await sql.query('select familia_id, datos, actualizado_por, actualizado_en from ficha_datos');
+    return json(req, env, { datos: d });
+  }
+  if (pathname === '/api/ficha' && method === 'POST') {
+    const b = await readBody(req);
+    const nombre = cleanNombre(b.nombre);
+    const f = b.familia && typeof b.familia === 'object' ? b.familia : {};
+    const datos = { _nueva: true };
+    for (const c of FICHA_CAMPOS) if (f[c] !== undefined) datos[c] = cleanValor(f[c], c);
+    if (!datos.nombre) throw new HttpError(400, 'Falta el nombre del producto.');
+    const id = 'N' + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 36 ** 2).toString(36).toUpperCase();
+    await sql.query('insert into ficha_datos (familia_id, datos, actualizado_por) values ($1,$2::jsonb,$3)', [id, JSON.stringify(datos), nombre]);
+    await sql.query("insert into ficha_cambios (familia_id, campo, anterior, nuevo, por) values ($1,'(alta de ficha)',null,$2,$3)", [id, datos.nombre, nombre]);
+    return json(req, env, { familia_id: id, datos }, 201);
+  }
+  m = pathname.match(/^\/api\/ficha\/([^/]+)\/cambios$/);
+  if (m && method === 'GET') {
+    const c = await sql.query('select campo, anterior, nuevo, por, en from ficha_cambios where familia_id = $1 order by en desc, id desc limit 200', [cleanFamilia(decodeURIComponent(m[1]))]);
+    return json(req, env, { cambios: c });
+  }
+  m = pathname.match(/^\/api\/ficha\/([^/]+)$/);
+  if (m && method === 'PATCH') {
+    if (!admin) throw new HttpError(403, 'Solo el administrador edita la ficha.');
+    const familia = cleanFamilia(decodeURIComponent(m[1]));
+    const b = await readBody(req);
+    const nombre = cleanNombre(b.nombre);
+    const campos = b.campos && typeof b.campos === 'object' ? b.campos : {};
+    const ant = b.anteriores && typeof b.anteriores === 'object' ? b.anteriores : {};
+    const nuevos = {};
+    for (const [k, v] of Object.entries(campos)) {
+      if (!FICHA_CAMPOS.includes(k)) throw new HttpError(400, `Campo no editable: ${k}`);
+      nuevos[k] = cleanValor(v, k);
+    }
+    if (!Object.keys(nuevos).length) throw new HttpError(400, 'No hay nada para actualizar.');
+    await sql.query(
+      `insert into ficha_datos (familia_id, datos, actualizado_por) values ($1,$2::jsonb,$3)
+       on conflict (familia_id) do update set datos = ficha_datos.datos || excluded.datos, actualizado_por = $3, actualizado_en = now()`,
+      [familia, JSON.stringify(nuevos), nombre]);
+    for (const [k, v] of Object.entries(nuevos)) {
+      const a = ant[k] === undefined ? null : String(ant[k]).slice(0, 4000);
+      if ((a ?? '') === v) continue;
+      await sql.query('insert into ficha_cambios (familia_id, campo, anterior, nuevo, por) values ($1,$2,$3,$4,$5)', [familia, k, a, v, nombre]);
+    }
     return json(req, env, { ok: true });
   }
 
