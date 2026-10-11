@@ -48,7 +48,7 @@ function corsHeaders(req, env) {
   const allowed = (env.ALLOWED_ORIGINS ? String(env.ALLOWED_ORIGINS).split(',').map(s => s.trim()) : DEFAULT_ORIGINS);
   const origin = req.headers.get('Origin');
   const h = {
-    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Clave',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -101,6 +101,13 @@ function ordenDe(codigo, tipo, cantidadOtros) {
   if ((m = codigo.match(/^(\d+) BIS$/i))) return Number(m[1]) * 10 + 5;
   if ((m = codigo.match(/^P(\d+)$/i))) return 10000 + Number(m[1]);
   return 20010 + cantidadOtros;
+}
+
+
+function cleanFamilia(v) {
+  const s = String(v ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(s)) throw new HttpError(400, 'Id de familia inválido.');
+  return s;
 }
 
 // ---------- acceso a datos ----------
@@ -251,6 +258,43 @@ async function handle(req, env, url, ctx) {
     const r = await sql.query('insert into posiciones (codigo, tipo, orden) values ($1,$2,$3) returning codigo, tipo, orden, activa',
       [codigo, tipo, ordenDe(codigo, tipo, otros[0].n)]);
     return json(req, env, { posicion: r[0] }, 201);
+  }
+
+  // ---- vínculos ficha de producto <-> molde (la posición siempre se lee del P.07) ----
+  if (pathname === '/api/vinculos' && method === 'GET') {
+    const v = await sql.query(
+      'select familia_id, molde_id, confirmado, origen, vinculado_por, vinculado_en from vinculos order by familia_id, molde_id');
+    return json(req, env, { vinculos: v });
+  }
+  m = pathname.match(/^\/api\/vinculos\/([^/]+)$/);
+  if (m && method === 'PUT') {
+    if (!admin) throw new HttpError(403, 'Solo el administrador vincula moldes con fichas.');
+    const familia = cleanFamilia(decodeURIComponent(m[1]));
+    const b = await readBody(req);
+    const nombre = cleanNombre(b.nombre);
+    const moldeId = parseId(b.molde_id);
+    await getMolde(sql, moldeId);
+    await sql.query(
+      `insert into vinculos (familia_id, molde_id, confirmado, origen, vinculado_por) values ($1,$2,true,'manual',$3)
+       on conflict (familia_id, molde_id) do update set confirmado = true, vinculado_por = $3, vinculado_en = now()`,
+      [familia, moldeId, nombre]);
+    return json(req, env, { ok: true }, 201);
+  }
+  m = pathname.match(/^\/api\/vinculos\/([^/]+)\/confirmar$/);
+  if (m && method === 'POST') {
+    if (!admin) throw new HttpError(403, 'Solo el administrador confirma vínculos.');
+    const familia = cleanFamilia(decodeURIComponent(m[1]));
+    const b = await readBody(req);
+    const nombre = cleanNombre(b.nombre);
+    await sql.query('update vinculos set confirmado = true, vinculado_por = $2, vinculado_en = now() where familia_id = $1', [familia, nombre]);
+    return json(req, env, { ok: true });
+  }
+  m = pathname.match(/^\/api\/vinculos\/([^/]+)\/(\d+)$/);
+  if (m && method === 'DELETE') {
+    if (!admin) throw new HttpError(403, 'Solo el administrador desvincula moldes.');
+    const familia = cleanFamilia(decodeURIComponent(m[1]));
+    await sql.query('delete from vinculos where familia_id = $1 and molde_id = $2', [familia, parseId(m[2])]);
+    return json(req, env, { ok: true });
   }
 
   throw new HttpError(404, 'Ruta inexistente.');

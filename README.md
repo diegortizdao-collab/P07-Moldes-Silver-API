@@ -47,9 +47,15 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 1. Como el P.07 pasa a ser registro controlado: actualizar el procedimiento y sumar un respaldo semestral (como Q.11).
 2. Revisar con los cambiadores los moldes cuyas posiciones difieren entre Listado e Histórico (se tomó el Listado por ser la ubicación real).
 
-## Siguiente fase
-Ficha de producto leyendo de Neon (con "vincular molde" asistido: solo ~290 de 1.978 productos se vinculan solos), fotos/logos en R2, lectura del maestro desde el planificador.
+## Ficha de producto ↔ P.07 (vínculos)
+- Tabla `vinculos (familia_id, molde_id, confirmado, origen, ...)`: `db/vinculos.sql` (correr UNA vez en el SQL Editor de Neon, después del schema y la semilla).
+- La ficha no guarda posiciones: las lee en vivo del P.07 a través del vínculo, así hay un solo lugar donde se mueve un molde.
+- Trae 239 vínculos **sugeridos** (misma posición que la planilla vieja de la ficha + cliente coincidente; en S/A y pallets además exige palabras en común con el nombre). Quedan marcados "Sugerido — falta confirmar" hasta que el administrador los confirme.
+- Endpoints: `GET /api/vinculos` (cualquier clave); `PUT /api/vinculos/:familia` {nombre, molde_id}, `POST /api/vinculos/:familia/confirmar`, `DELETE /api/vinculos/:familia/:molde_id` (solo admin).
+- Una familia puede tener más de un molde vinculado; un molde puede servir a varias familias.
 
+## Siguiente fase
+Fotos/logos de la ficha en R2 (hoy quedan en el navegador), edición de la ficha compartida entre dispositivos y lectura del maestro desde el planificador.
 
 ## Deploy desde Cloudflare (sin Node local)
 Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) están en Secrets Store y declarados en wrangler.toml (si no figuran ahí, el deploy los borra).
