@@ -7,14 +7,13 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 
 ## Estructura
 - `db/schema.sql` y `db/seed.sql`: tablas `posiciones` y `moldes` + carga inicial de la planilla al 09/06/26 (354 posiciones, 394 moldes).
-- `worker/`: API en Cloudflare Worker (`p07-moldes-api`), 37 pruebas de API aprobadas.
+- raíz: API en Cloudflare Worker (`p07-moldes-api`), 37 pruebas de API aprobadas.
 - `app/`: página única (HTML + JS puro) para GitHub Pages, 35 pruebas de interfaz aprobadas.
 
 ## Despliegue (≈15 min)
 1. **Neon** (proyecto de NC Silver): SQL Editor → pegar y ejecutar `db/schema.sql`, luego `db/seed.sql`. La semilla se bloquea sola si se corre por segunda vez.
 2. **Worker** (igual que NC-Silver-API: secrets comunes, sin Secrets Store):
    ```
-   cd worker
    npm install
    npx wrangler secret put DATABASE_URL   # cadena de conexión de Neon (la misma que usa NC)
    npx wrangler secret put PLANTA_KEY     # Moldessilverindustrial
@@ -50,3 +49,7 @@ Desarrollado por Mgter. Diego Ortiz — Líder de Mejora Continua | Consultor IS
 
 ## Siguiente fase
 Ficha de producto leyendo de Neon (con "vincular molde" asistido: solo ~290 de 1.978 productos se vinculan solos), fotos/logos en R2, lectura del maestro desde el planificador.
+
+
+## Deploy desde Cloudflare (sin Node local)
+Workers & Pages → Import a repository → este repo. Root directory `/`, deploy command `npx wrangler deploy`. Los secrets (DATABASE_URL, PLANTA_KEY, ADMIN_KEY) se cargan en Settings → Variables and Secrets.
